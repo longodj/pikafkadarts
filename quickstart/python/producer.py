@@ -9,6 +9,11 @@
 
 from confluent_kafka import Producer
 import sys
+import time
+import random
+import os
+
+random.seed()
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -20,17 +25,18 @@ if __name__ == '__main__':
     # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
     # See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka#prerequisites for SSL issues
     conf = {
-        'bootstrap.servers': 'mynamespace.servicebus.windows.net:9093', #replace
+        'bootstrap.servers': 'weareicarus.servicebus.windows.net:9093', #replace
         'security.protocol': 'SASL_SSL',
-        'ssl.ca.location': '/path/to/ca-certificate.crt',
+        'ssl.ca.location': '/usr/lib/ssl/certs/ca-certificates.crt',
         'sasl.mechanism': 'PLAIN',
         'sasl.username': '$ConnectionString',
-        'sasl.password': '{YOUR.EVENTHUBS.CONNECTION.STRING}',          #replace
-        'client.id': 'python-example-producer'
+        'sasl.password': 'Endpoint=sb://weareicarus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=jtW3dIDa/ffQnoWzquQD0Cf/UyXuOSIL1ov7FFY9e4I=',          #replace
+        'client.id': os.uname()[1]
     }
 
     # Create Producer instance
     p = Producer(**conf)
+    print("Producer created")
 
 
     def delivery_callback(err, msg):
@@ -41,13 +47,14 @@ if __name__ == '__main__':
 
 
     # Write 1-100 to topic
-    for i in range(0, 100):
+    while True:
         try:
-            p.produce(topic, str(i), callback=delivery_callback)
+            p.produce(topic, str(random.uniform(0,4)-2), callback=delivery_callback)
         except BufferError as e:
             sys.stderr.write('%% Local producer queue is full (%d messages awaiting delivery): try again\n' % len(p))
         p.poll(0)
+        p.flush()
+        time.sleep(1)
 
     # Wait until all messages have been delivered
     sys.stderr.write('%% Waiting for %d deliveries\n' % len(p))
-    p.flush()
