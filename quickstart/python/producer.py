@@ -13,17 +13,17 @@ import time
 import random
 import os
 
-from dotenv import load_dotenv
-from pathlib import Path
+#from dotenv import load_dotenv
+#from pathlib import Path
 
 '''
-Local .env file should contain:
+Environment variables file passed through --env-file should contain:
 
 PIKAFKADARTS_BOOTSTRAP_SERVER="{FQDN}"
 PIKAFKADARTS_CONNECTION_STRING="{CONNECTION_STRING}"
 '''
-env_path = Path('.') / '.env'
-load_dotenv(dotenv_path=env_path)
+#env_path = Path('.') / '.env'
+#load_dotenv(dotenv_path=env_path)
 
 random.seed()
 
