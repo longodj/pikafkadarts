@@ -37,10 +37,7 @@
  */
 
 
-/* Timestamp (microseconds).
- * Struct members with this type usually have the "ts_" prefix for
- * the internal monotonic clock timestamp, or "wts_" for wall clock timestamp.
- */
+/* Timestamp (microseconds) */
 typedef int64_t rd_ts_t;
 
 #define RD_TS_MAX  INT64_MAX

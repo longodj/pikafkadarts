@@ -41,7 +41,6 @@ set(
     rdkafka_aux.c
     rdkafka_background.c
     rdkafka_idempotence.c
-    rdkafka_cert.c
     rdlist.c
     rdlog.c
     rdmurmur2.c
@@ -56,10 +55,6 @@ set(
     tinycthread_extra.c
     xxhash.c
 )
-
-if(WITH_SSL)
-  list(APPEND sources rdkafka_ssl.c)
-endif()
 
 if(WITH_HDRHISTOGRAM)
   list(APPEND sources rdhdrhistogram.c)
@@ -81,10 +76,6 @@ endif()
 
 if(WITH_SASL_SCRAM)
   list(APPEND sources rdkafka_sasl_scram.c)
-endif()
-
-if(WITH_SASL_OAUTHBEARER)
-  list(APPEND sources rdkafka_sasl_oauthbearer.c)
 endif()
 
 if(WITH_ZLIB)
@@ -121,9 +112,6 @@ if(WITHOUT_WIN32_CONFIG)
   if(WITH_SASL_SCRAM)
     list(APPEND rdkafka_compile_definitions WITH_SASL_SCRAM)
   endif(WITH_SASL_SCRAM)
-  if(WITH_SASL_OAUTHBEARER)
-    list(APPEND rdkafka_compile_definitions WITH_SASL_OAUTHBEARER)
-  endif(WITH_SASL_OAUTHBEARER)
   if(ENABLE_DEVEL)
     list(APPEND rdkafka_compile_definitions ENABLE_DEVEL)
   endif(ENABLE_DEVEL)
@@ -174,6 +162,8 @@ if(WITH_ZLIB)
 endif()
 
 if(WITH_ZSTD)
+  find_library (ZSTD_LIBRARY zstd)
+  find_path (ZSTD_INCLUDE_DIR NAMES zstd.h)
   target_link_libraries(rdkafka PUBLIC ${ZSTD_LIBRARY})
   target_include_directories(rdkafka PUBLIC ${ZSTD_INCLUDE_DIR})
   message(STATUS "Found ZSTD: ${ZSTD_LIBRARY}")

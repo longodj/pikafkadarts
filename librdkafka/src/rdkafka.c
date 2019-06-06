@@ -49,10 +49,6 @@
 #include "rdkafka_sasl.h"
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
-#include "rdkafka_sasl_oauthbearer.h"
-#if WITH_SSL
-#include "rdkafka_ssl.h"
-#endif
 
 #include "rdtime.h"
 #include "crc32c.h"
@@ -127,7 +123,7 @@ void rd_kafka_set_thread_sysname (const char *fmt, ...) {
         thrd_setname(rd_kafka_thread_sysname);
 }
 
-static void rd_kafka_global_init0 (void) {
+static void rd_kafka_global_init (void) {
 #if ENABLE_SHAREDPTR_DEBUG
         LIST_INIT(&rd_shared_ptr_debug_list);
         mtx_init(&rd_shared_ptr_debug_mtx, mtx_plain);
@@ -138,19 +134,6 @@ static void rd_kafka_global_init0 (void) {
 	rd_atomic32_init(&rd_kafka_op_cnt, 0);
 #endif
         crc32c_global_init();
-#if WITH_SSL
-        /* The configuration interface might need to use
-         * OpenSSL to parse keys, prior to any rd_kafka_t
-         * object has been created. */
-        rd_kafka_ssl_init();
-#endif
-}
-
-/**
- * @brief Initialize once per process
- */
-void rd_kafka_global_init (void) {
-        call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
 }
 
 /**
@@ -175,7 +158,7 @@ static void rd_kafka_global_cnt_incr (void) {
 	if (rd_kafka_global_cnt == 1) {
 		rd_kafka_transport_init();
 #if WITH_SSL
-                rd_kafka_ssl_init();
+		rd_kafka_transport_ssl_init();
 #endif
                 rd_kafka_sasl_global_init();
 	}
@@ -193,7 +176,7 @@ static void rd_kafka_global_cnt_decr (void) {
 	if (rd_kafka_global_cnt == 0) {
                 rd_kafka_sasl_global_term();
 #if WITH_SSL
-                rd_kafka_ssl_term();
+		rd_kafka_transport_ssl_term();
 #endif
 	}
 	mtx_unlock(&rd_kafka_global_lock);
@@ -287,33 +270,7 @@ void rd_kafka_log0 (const rd_kafka_conf_t *conf,
         rd_kafka_log_buf(conf, rk, level, fac, buf);
 }
 
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token (rd_kafka_t *rk,
-                                const char *token_value,
-                                int64_t md_lifetime_ms,
-                                const char *md_principal_name,
-                                const char **extensions, size_t extension_size,
-                                char *errstr, size_t errstr_size) {
-#if WITH_SASL_OAUTHBEARER
-        return rd_kafka_oauthbearer_set_token0(
-                rk, token_value,
-                md_lifetime_ms, md_principal_name, extensions, extension_size,
-                errstr, errstr_size);
-#else
-        rd_snprintf(errstr, errstr_size,
-                    "librdkafka not built with SASL OAUTHBEARER support");
-        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-#endif
-}
 
-rd_kafka_resp_err_t
-rd_kafka_oauthbearer_set_token_failure (rd_kafka_t *rk, const char *errstr) {
-#if WITH_SASL_OAUTHBEARER
-        return rd_kafka_oauthbearer_set_token_failure0(rk, errstr);
-#else
-        return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
-#endif
-}
 
 void rd_kafka_log_print(const rd_kafka_t *rk, int level,
 	const char *fac, const char *buf) {
@@ -844,10 +801,6 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 
         rd_kafka_metadata_cache_destroy(rk);
 
-        /* Terminate SASL provider */
-        if (rk->rk_conf.sasl.provider)
-                rd_kafka_sasl_term(rk);
-
         rd_kafka_timers_destroy(&rk->rk_timers);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying op queues");
@@ -866,9 +819,9 @@ void rd_kafka_destroy_final (rd_kafka_t *rk) {
 	rd_kafka_q_destroy_owner(rk->rk_ops);
 
 #if WITH_SSL
-        if (rk->rk_conf.ssl.ctx) {
+	if (rk->rk_conf.ssl.ctx) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Destroying SSL CTX");
-                rd_kafka_ssl_ctx_term(rk);
+                rd_kafka_transport_ssl_ctx_term(rk);
         }
 #endif
 
@@ -1888,7 +1841,7 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         char builtin_features[128];
         size_t bflen;
 
-        rd_kafka_global_init();
+	call_once(&rd_kafka_global_init_once, rd_kafka_global_init);
 
         /* rd_kafka_new() takes ownership of the provided \p app_conf
          * object if rd_kafka_new() succeeds.
@@ -1979,17 +1932,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 		rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_OFFSET_COMMIT;
         if (rk->rk_conf.error_cb)
                 rk->rk_conf.enabled_events |= RD_KAFKA_EVENT_ERROR;
-#if WITH_SASL_OAUTHBEARER
-        if (rk->rk_conf.sasl.enable_oauthbearer_unsecure_jwt &&
-            !rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
-                rd_kafka_conf_set_oauthbearer_token_refresh_cb(
-                        &rk->rk_conf,
-                        rd_kafka_oauthbearer_unsecured_token);
-
-        if (rk->rk_conf.sasl.oauthbearer_token_refresh_cb)
-                rk->rk_conf.enabled_events |=
-                        RD_KAFKA_EVENT_OAUTHBEARER_TOKEN_REFRESH;
-#endif
 
         rk->rk_controllerid = -1;
 
@@ -2042,17 +1984,8 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
 
         if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL ||
             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_PLAINTEXT) {
-                /* Select SASL provider */
                 if (rd_kafka_sasl_select_provider(rk,
                                                   errstr, errstr_size) == -1) {
-                        ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
-                        ret_errno = EINVAL;
-                        goto fail;
-                }
-
-                /* Initialize SASL provider */
-                if (rd_kafka_sasl_init(rk, errstr, errstr_size) == -1) {
-                        rk->rk_conf.sasl.provider = NULL;
                         ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         ret_errno = EINVAL;
                         goto fail;
@@ -2060,10 +1993,11 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
         }
 
 #if WITH_SSL
-        if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
-            rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {
-                /* Create SSL context */
-                if (rd_kafka_ssl_ctx_init(rk, errstr, errstr_size) == -1) {
+	if (rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
+	    rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) {
+		/* Create SSL context */
+		if (rd_kafka_transport_ssl_ctx_init(rk, errstr,
+						    errstr_size) == -1) {
                         ret_err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                         ret_errno = EINVAL;
                         goto fail;
@@ -2238,9 +2172,6 @@ rd_kafka_t *rd_kafka_new (rd_kafka_type_t type, rd_kafka_conf_t *app_conf,
                      builtin_features, BUILT_WITH,
                      rk->rk_conf.debug);
 
-        /* Log warnings for deprecated configuration */
-        rd_kafka_conf_warn(rk);
-
 	return rk;
 
 fail:
@@ -2252,10 +2183,6 @@ fail:
          * Tell background thread to terminate and wait for it to return.
          */
         rd_atomic32_set(&rk->rk_terminate, RD_KAFKA_DESTROY_F_TERMINATE);
-
-        /* Terminate SASL provider */
-        if (rk->rk_conf.sasl.provider)
-                rd_kafka_sasl_term(rk);
 
         if (rk->rk_background.thread) {
                 int res;

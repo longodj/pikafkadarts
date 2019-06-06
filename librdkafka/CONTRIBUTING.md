@@ -108,7 +108,7 @@ For example:
 
 ### Write good commit messages
 
-A short guide to how to write good commit messages.
+A short guide to how to write commit messages in the curl project.
 
     ---- start ----
     [area]: [short line describing the main effect] [(#issuenumber)]

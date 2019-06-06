@@ -16,7 +16,7 @@ mkl_require pic
 mkl_require atomics
 mkl_require good_cflags
 mkl_require socket
-mkl_require libzstd
+mkl_require zstd
 mkl_require libssl
 mkl_require libsasl2
 
@@ -93,7 +93,7 @@ void foo (void) {
                   "#include <zlib.h>"
     mkl_check "libssl" disable
     mkl_check "libsasl2" disable
-    mkl_check "libzstd" disable
+    mkl_check "zstd" disable
 
     if mkl_lib_check "libm" "" disable CC "-lm" \
                      "#include <math.h>"; then
@@ -130,9 +130,6 @@ void foo (void) {
     if [[ "$WITH_SSL" == "y" ]]; then
         # SASL SCRAM requires base64 encoding from OpenSSL
         mkl_allvar_set WITH_SASL_SCRAM WITH_SASL_SCRAM y
-        # SASL OAUTHBEARER's default unsecured JWS implementation
-        # requires base64 encoding from OpenSSL
-        mkl_allvar_set WITH_SASL_OAUTHBEARER WITH_SASL_OAUTHBEARER y
     fi
 
     # CRC32C: check for crc32 instruction support.
@@ -183,7 +180,7 @@ void foo (void) {
     mkl_mkvar_append CXXFLAGS CXXFLAGS "-Wno-non-virtual-dtor"
 
     # Required on SunOS
-    if [[ $MKL_DISTRO == "sunos" ]]; then
+    if [[ $MKL_DISTRO == "SunOS" ]]; then
 	mkl_mkvar_append CPPFLAGS CPPFLAGS "-D_POSIX_PTHREAD_SEMANTICS -D_REENTRANT -D__EXTENSIONS__"
 	# Source defines _POSIX_C_SOURCE to 200809L for Solaris, and this is
 	# incompatible on that platform with compilers < c99.
@@ -223,7 +220,7 @@ void foo (void) {
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then
 	# nm by future mk var
-	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "aix" ]]; then
+	if [[ $MKL_DISTRO == "osx" || $MKL_DISTRO == "AIX" ]]; then
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -g'
 	else
 	    mkl_mkvar_set SYMDUMPER SYMDUMPER '$(NM) -D'

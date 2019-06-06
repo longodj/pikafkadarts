@@ -195,10 +195,7 @@ int rd_kafka_sasl_client_new (rd_kafka_transport_t *rktrans,
                 return -1;
         }
 
-        rd_kafka_broker_lock(rktrans->rktrans_rkb);
         rd_strdupa(&hostname, rktrans->rktrans_rkb->rkb_nodename);
-        rd_kafka_broker_unlock(rktrans->rktrans_rkb);
-
         if ((t = strchr(hostname, ':')))
                 *t = '\0';  /* remove ":port" */
 
@@ -247,55 +244,6 @@ void rd_kafka_sasl_broker_init (rd_kafka_broker_t *rkb) {
 }
 
 
-/**
- * @brief Per-instance initializer using the selected provider
- *
- * @returns 0 on success or -1 on error.
- *
- * @locality app thread (from rd_kafka_new())
- */
-int rd_kafka_sasl_init (rd_kafka_t *rk, char *errstr, size_t errstr_size) {
-        const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
-
-        if (provider && provider->init)
-                return provider->init(rk, errstr, errstr_size);
-
-        return 0;
-}
-
-
-/**
- * @brief Per-instance destructor for the selected provider
- *
- * @locality app thread (from rd_kafka_new()) or rdkafka main thread
- */
-void rd_kafka_sasl_term (rd_kafka_t *rk) {
-        const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
-
-        if (provider && provider->term)
-                provider->term(rk);
-}
-
-
-/**
- * @returns rd_true if provider is ready to be used or SASL not configured,
- *          else rd_false.
- *
- * @locks none
- * @locality any thread
- */
-rd_bool_t rd_kafka_sasl_ready (rd_kafka_t *rk) {
-        const struct rd_kafka_sasl_provider *provider =
-                rk->rk_conf.sasl.provider;
-
-        if (provider && provider->ready)
-                return provider->ready(rk);
-
-        return rd_true;
-}
-
 
 /**
  * @brief Select SASL provider for configured mechanism (singularis)
@@ -324,11 +272,6 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
                 provider = &rd_kafka_sasl_scram_provider;
 #endif
 
-        } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "OAUTHBEARER")) {
-                /* SASL OAUTHBEARER */
-#if WITH_SASL_OAUTHBEARER
-                provider = &rd_kafka_sasl_oauthbearer_provider;
-#endif
         } else {
                 /* Unsupported mechanism */
                 rd_snprintf(errstr, errstr_size,
@@ -355,9 +298,6 @@ int rd_kafka_sasl_select_provider (rd_kafka_t *rk,
 #endif
 #if WITH_SASL_SCRAM
                             " SASL_SCRAM"
-#endif
-#if WITH_SASL_OAUTHBEARER
-                            " OAUTHBEARER"
 #endif
                             ,
                             rk->rk_conf.sasl.mechanisms);

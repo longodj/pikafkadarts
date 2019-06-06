@@ -356,18 +356,12 @@ struct rd_kafka_s {
                 /**< Lock for sparse_connect_random */
                 mtx_t         sparse_connect_lock;
         } rk_suppress;
-
-        struct {
-                void *handle; /**< Provider-specific handle struct pointer.
-                               *   Typically assigned in provider's .init() */
-        } rk_sasl;
 };
 
 #define rd_kafka_wrlock(rk)    rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)    rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk)    rwlock_rdunlock(&(rk)->rk_lock)
 #define rd_kafka_wrunlock(rk)    rwlock_wrunlock(&(rk)->rk_lock)
-
 
 /**
  * @brief Add \p cnt messages and of total size \p size bytes to the
@@ -482,7 +476,6 @@ rd_kafka_curr_msgs_cnt (rd_kafka_t *rk) {
 
 void rd_kafka_destroy_final (rd_kafka_t *rk);
 
-void rd_kafka_global_init (void);
 
 /**
  * @returns true if \p rk handle is terminating.
