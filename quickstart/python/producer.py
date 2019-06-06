@@ -13,6 +13,18 @@ import time
 import random
 import os
 
+from dotenv import load_dotenv
+from pathlib import Path
+
+'''
+Local .env file should contain:
+
+PIKAFKADARTS_BOOTSTRAP_SERVER="{FQDN}"
+PIKAFKADARTS_CONNECTION_STRING="{CONNECTION_STRING}"
+'''
+env_path = Path('.') / '.env'
+load_dotenv(dotenv_path=env_path)
+
 random.seed()
 
 if __name__ == '__main__':
@@ -25,12 +37,13 @@ if __name__ == '__main__':
     # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
     # See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka#prerequisites for SSL issues
     conf = {
-        'bootstrap.servers': 'weareicarus.servicebus.windows.net:9093', #replace
+        'bootstrap.servers': os.getenv("PIKAFKADARTS_BOOTSTRAP_SERVER") + \
+                ':9093',
         'security.protocol': 'SASL_SSL',
         'ssl.ca.location': '/usr/lib/ssl/certs/ca-certificates.crt',
         'sasl.mechanism': 'PLAIN',
         'sasl.username': '$ConnectionString',
-        'sasl.password': 'Endpoint=sb://weareicarus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=jtW3dIDa/ffQnoWzquQD0Cf/UyXuOSIL1ov7FFY9e4I=',          #replace
+        'sasl.password': os.getenv("PIKAFKADARTS_CONNECTION_STRING"),
         'client.id': os.uname()[1]
     }
 

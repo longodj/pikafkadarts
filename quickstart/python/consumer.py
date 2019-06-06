@@ -14,6 +14,18 @@ import json
 import logging
 from pprint import pformat
 
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+'''
+Local .env file should contain:
+
+PIKAFKADARTS_BOOTSTRAP_SERVERS="{FQDN}"
+PIKAFKADARTS_CONNECTION_STRING="{CONNECTION_STRING}"
+'''
+env_path = Path('.') / '.env'
+load_dotenv(dotenv_path=env_path)
 
 def stats_cb(stats_json_str):
     stats_json = json.loads(stats_json_str)
@@ -40,14 +52,15 @@ if __name__ == '__main__':
     # Consumer configuration
     # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
     conf = {
-        'bootstrap.servers': 'mynamespace.servicebus.windows.net:9093', #update
+        'bootstrap.servers': os.getenv("PIKAFKADARTS_BOOTSTRAP_SERVER") + \
+                ':9093',
         'security.protocol': 'SASL_SSL',
-        'ssl.ca.location': '/path/to/ca-certificate.crt',
+        'ssl.ca.location': '/usr/lib/ssl/certs/ca-certificates.crt',
         'sasl.mechanism': 'PLAIN',
         'sasl.username': '$ConnectionString',
-        'sasl.password': '{YOUR.EVENTHUBS.CONNECTION.STRING}',          #update
+        'sasl.password': os.getenv("PIKAFKADARTS_CONNECTION_STRING"),
         'group.id': group,
-        'client.id': 'python-example-consumer',
+        'client.id': 'deepsky',
         'request.timeout.ms': 60000,
         'session.timeout.ms': 60000,
         'default.topic.config': {'auto.offset.reset': 'smallest'}
@@ -80,17 +93,21 @@ if __name__ == '__main__':
     # Create Consumer instance
     # Hint: try debug='fetch' to generate some log messages
     c = Consumer(conf, logger=logger)
+    print("Consuming")
 
     def print_assignment(consumer, partitions):
         print('Assignment:', partitions)
 
     # Subscribe to topics
     c.subscribe(topics, on_assign=print_assignment)
+    print("Subscribed")
 
     # Read messages from Kafka, print to stdout
     try:
         while True:
+            print('.', end='')
             msg = c.poll(timeout=100.0)
+            print()
             if msg is None:
                 continue
             if msg.error():
@@ -111,4 +128,5 @@ if __name__ == '__main__':
 
     finally:
         # Close down consumer to commit final offsets.
+        print("Closing")
         c.close()
